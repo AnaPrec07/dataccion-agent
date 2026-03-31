@@ -1,0 +1,9 @@
+google-genai
+streamlit
+requests
+black
+google-cloud-storage
+dotenv
+pypdf
+chromadb
+bertopic
