@@ -1,131 +1,68 @@
 # Dataccion Agent
 
-Chatbot especializado desarrollado para **ONU Mujer (UN Women) Latinoamerica** que responde preguntas sobre las barreras estructurales, culturales, legales y economicas que enfrentan las mujeres en los mercados laborales de America Latina.
+Herramientas de asistente de investigación para **ONU Mujer (UN Women) América Latina**: un chatbot en Streamlit basado en investigación sobre mercados laborales, más cuadernos para extraer y analizar datos regionales de género y empleo.
 
-El agente combina **Retrieval-Augmented Generation (RAG)** con **Topic Modeling** sobre un corpus de informes PDF almacenados en Google Cloud Storage.
+## Contenido del repositorio
 
-## Arquitectura
+| Área | Propósito |
+|------|-----------|
+| **`feminist_bot/`** | **Dataccion Chat Bot** — Gemini en Vertex AI con llamada a herramientas (`list_reports`, `retrieve_context`) sobre PDFs en Google Cloud Storage y un índice RAG en ChromaDB. |
+| **`feminist_bot/rag/`** | Pipeline RAG: carga de PDFs, embeddings, almacén vectorial y recuperador. |
+| **`feminist_bot/topic_modeling/`** | Utilidades de modelado de tópicos estilo BERTopic para análisis de texto. |
+| **`extraction/`** | Cuadernos Jupyter y salidas CSV del Banco Mundial, BID e indicadores relacionados con trabajo y género. |
 
-```
-Usuario (Streamlit)
-       |
-       v
-  Gemini 2.5 Flash (Vertex AI)
-       |
-       |-- Function Calling --> retrieve_context (RAG)
-       |                             |
-       |                             v
-       |                        ChromaDB (busqueda por similitud coseno)
-       |
-       |-- Function Calling --> list_reports (GCS)
-       |
-       v
-  Respuesta con citas de fuentes
-```
+## Requisitos
 
-### Componentes principales
+- Python 3.10+ (recomendado)
+- [Google Cloud SDK](https://cloud.google.com/sdk) (`gcloud`) con un proyecto donde estén habilitados Vertex AI y las APIs que uses
+- Un bucket de GCS con informes en PDF organizados bajo prefijos como `current_situation/`, `forward_looking/` y `proposal/` (como usa la herramienta `list_reports` de la app)
 
-| Componente | Descripcion |
-|------------|-------------|
-| **RAG Pipeline** | Ingesta PDFs desde GCS, los divide en chunks con overlap, genera embeddings multilingues (Vertex AI) y los almacena en ChromaDB para recuperacion semantica |
-| **Topic Modeling** | Reutiliza los embeddings de ChromaDB para descubrir topicos con BERTopic (UMAP + HDBSCAN + c-TF-IDF) y generar visualizaciones interactivas |
-| **Agente Conversacional** | Interfaz Streamlit con Gemini 2.5 Flash que decide autonomamente cuando consultar la base de conocimiento o listar reportes via function calling |
-| **Analisis Exploratorio** | Notebooks con analisis de datos del BID y Banco Mundial sobre segregacion laboral, horas trabajadas y sobreeducacion |
+## Configuración
 
-### Estructura del proyecto
+1. **Clonar y crear un entorno virtual**
 
-```
-dataccion-agent/
-├── feminist_bot/
-│   ├── app.py                  # Aplicacion Streamlit principal
-│   ├── instructions.py         # System prompt del agente
-│   ├── tools.py
-│   ├── rag/
-│   │   ├── pdf_loader.py       # Carga PDFs de GCS y chunking
-│   │   ├── embeddings.py       # Embeddings via Vertex AI (text-multilingual-embedding-002)
-│   │   ├── vector_store.py     # ChromaDB como vector store
-│   │   └── retriever.py        # Orquestador del pipeline RAG
-│   └── topic_modeling/
-│       ├── extractor.py        # Extrae corpus desde ChromaDB
-│       ├── model.py            # BERTopic (UMAP + HDBSCAN + c-TF-IDF)
-│       ├── pipeline.py         # Pipeline end-to-end de topic modeling
-│       └── visualizer.py       # Visualizaciones Plotly (HTML)
-├── extraction/                 # Notebooks de analisis exploratorio
-├── enable_apis.sh              # Script para habilitar APIs de GCP
-└── requirements.txt
-```
+   ```bash
+   cd dataccion-agent
+   python -m venv .venv
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-## Requisitos previos
+2. **Autenticarse en Google Cloud**
 
-- Python 3.10+
-- Proyecto de GCP con las siguientes APIs habilitadas:
-  - Vertex AI (`aiplatform.googleapis.com`)
-  - Cloud Storage
-  - Cloud Resource Manager
-- Autenticacion configurada con Google Cloud:
-  ```bash
-  gcloud auth application-default login
-  gcloud auth application-default set-quota-project <TU_PROJECT_ID>
-  ```
-- Un bucket de GCS con los reportes PDF organizados por categoria (`current_situation/`, `forward_looking/`, `proposal/`)
+   ```bash
+   gcloud auth application-default login
+   ```
 
-## Instalacion
+   Opcional: ejecutar `./enable_apis.sh` (o habilitar las mismas APIs en la consola de Cloud) para Vertex AI y servicios relacionados con tu despliegue.
 
-```bash
-# Clonar el repositorio
-git clone <url-del-repo>
-cd dataccion-agent
+3. **Variables de entorno**
 
-# Crear entorno virtual
-python -m venv venv
+   Crea un archivo `.env` en `feminist_bot/` (o en el directorio desde el que ejecutes Streamlit) con al menos:
 
-# Activar entorno virtual
-# En Windows:
-venv\Scripts\activate
-# En Linux/Mac:
-source venv/bin/activate
+   ```env
+   BUCKET_NAME=nombre-de-tu-bucket-gcs
+   ```
 
-# Instalar dependencias
-pip install -r requirements.txt
-```
+   La aplicación requiere acceso a Vertex AI para el proyecto de GCP configurado (consulta `feminist_bot/app.py` para `PROJECT_ID` y la configuración del modelo).
 
-## Variables de entorno
+4. **Índice RAG**
 
-Crear un archivo `.env` en la raiz del proyecto:
+   En el primer uso puede ser necesario construir el índice vectorial a partir de los PDFs del bucket llamando a `retriever.ingest()` (ver comentarios en `feminist_bot/rag/retriever.py`). La app de Streamlit trae la ingesta comentada en `app.py`; actívala cuando quieras una re-ingesta completa.
 
-```env
-BUCKET_NAME=nombre-de-tu-bucket-gcs
-```
+## Ejecutar el chat
 
-## Como ejecutar
-
-### Levantar el chatbot
+Desde el directorio `feminist_bot` (para que resuelvan los imports locales):
 
 ```bash
 cd feminist_bot
 streamlit run app.py
 ```
 
-Esto abre la aplicacion en `http://localhost:8501`.
+## Dependencias
 
-### Ejecutar con puerto personalizado
+Las bibliotecas principales están en `requirements.txt`, entre ellas `streamlit`, `google-genai`, `google-cloud-storage`, `chromadb`, `pypdf` y `bertopic`.
 
-```bash
-cd feminist_bot
-streamlit run app.py --server.port 8080
-```
+## Licencia
 
-### Habilitar las APIs de GCP (primera vez)
-
-```bash
-bash enable_apis.sh
-```
-
-## Stack tecnologico
-
-- **LLM**: Gemini 2.5 Flash (Vertex AI)
-- **Embeddings**: text-multilingual-embedding-002 (768 dims, ES/EN)
-- **Vector Store**: ChromaDB (persistencia local, metrica coseno)
-- **Topic Modeling**: BERTopic (UMAP + HDBSCAN + c-TF-IDF)
-- **Frontend**: Streamlit
-- **Cloud**: Google Cloud Platform (Storage + Vertex AI)
+Añade un archivo de licencia si planeas distribuir este repositorio públicamente.
